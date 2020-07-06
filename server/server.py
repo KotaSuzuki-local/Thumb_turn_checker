@@ -5,6 +5,7 @@ import subprocess
 import time
 import os
 import asyncio
+import schedule
 from logscreen import screen 
 from azure.iot.device.aio import IoTHubDeviceClient
 from azure.core.exceptions import AzureError
@@ -46,10 +47,9 @@ async def store_blob(blob_info, file_name):
 
 async def connectAndUploadToAzure(imgPath):
     try:
-        screen.logOK( "IoT Hub file upload, press Ctrl-C to exit" )
+        screen.logOK( "IoT Hub file upload." )
 
         conn_str = CONNECTION_STRING
-        #file_name = PATH_TO_FILE
         blob_name = os.path.basename(imgPath)
 
         device_client = IoTHubDeviceClient.create_from_connection_string(conn_str)
@@ -61,21 +61,21 @@ async def connectAndUploadToAzure(imgPath):
         storage_info = await device_client.get_storage_info_for_blob(blob_name)
 
         # Upload to blob
-        success, result = await store_blob(storage_info, file_name)
+        success, result = await store_blob(storage_info, imgPath)
 
         if success == True:
-            print("Upload succeeded. Result is: \n") 
-            print(result)
+            screen.logOK("Upload succeeded. Result is: \n") 
+            screen.logOK(result)
             print()
 
             await device_client.notify_blob_upload_status(
-                storage_info["correlationId"], True, 200, "OK: {}".format(file_name)
+                storage_info["correlationId"], True, 200, "OK: {}".format(imgPath)
             )
 
         else :
             # If the upload was not successful, the result is the exception object
-            print("Upload failed. Exception is: \n") 
-            print(result)
+            screen.logFatal("Upload failed. Exception is: \n") 
+            screen.logFatal(result)
             print()
 
             await device_client.notify_blob_upload_status(
@@ -83,15 +83,12 @@ async def connectAndUploadToAzure(imgPath):
             )
 
     except Exception as ex:
-        print("\nException:")
-        print(ex)
-
-    except KeyboardInterrupt:
-        print ( "\nIoTHubDeviceClient sample stopped" )
+        screen.logFatal(ex)
 
     finally:
         # Finally, disconnect the client
         await device_client.disconnect()
+        screen.logOK("Disconnect the client")
 
 
 def getPhoto():
@@ -107,11 +104,16 @@ def getPhoto():
     screen.logOK("Successful photo shoot. time:" + takePhotoTime.strftime('%Y/%m/%d %H:%M:%S'))
     return os.path.abspath("./photo.jpg")
 
-def sendToAzure(imgPath):
-    pass
-
 def main():
-    pass
+    photopath = getPhoto()
+    connectAndUploadToAzure(photopath)
+
 
 if __name__ == "__main__":
-    main()
+    # 5分ごとに実行
+    try:
+        screen.logOK( "Running System, press Ctrl-C to exit" )
+        schedule.every(5).minutes.do(main)
+    except KeyboardInterrupt:
+        screen.logFatal( "System stopped." )
+
